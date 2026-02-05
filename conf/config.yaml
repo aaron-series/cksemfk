@@ -1,0 +1,37 @@
+server:
+  host: "0.0.0.0"
+  port: 10101
+  app_module: "libs.api.app:app"
+  log_level: "info"
+
+paths:
+  logs_dir: "logs"
+  temp_dir: "temp_uploads"
+  # service.sh에서 사용하는 경로 (프로젝트 루트 기준)
+  pid_file: "logs/app.pid"
+  log_file: "logs/service.out"
+
+pdf:
+  threads: 4
+  
+worker:
+  # 프로젝트 루트 기준 상대 경로
+  script_path: "libs/core/worker.py"
+  python_path:
+    - "venv/bin/python3.10"
+    - "venv/bin/python3.11"
+    - "venv/bin/python3.12"
+    - "venv/bin/python3.13"
+    - "venv/bin/python3.14"
+    - "venv/bin/python3.15"
+    - "venv/bin/python3.16"
+    - "venv/bin/python3.17"
+    - "venv/bin/python3.18"
+    - "venv/bin/python3.19"
+    - "venv/bin/python3.20"
+    - "venv/bin/python3"
+    - "venv/bin/python"
+  pool_size: 1
+  vllm:
+    tensor_parallel: 2
+    model_name: "chandra-7b"

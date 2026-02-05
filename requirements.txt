@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+git+https://github.com/datalab-to/chandra.git
+python-multipart
+pyyaml
+pdf2image
