@@ -85,7 +85,7 @@ def resolve_python_bin() -> str:
             # 2) 실제 동작 검증 ★핵심★
             test_code = (
                 "import sys, json\n"
-                "import chandra\n"           # ← chandra 존재 검증
+                "import chandra\n"
                 "print('OK')"
             )
 
@@ -137,6 +137,7 @@ app = FastAPI(title="Chandra API", description="Supports Multi-page PDF Processi
 # ---------------------------------------------------------
 def call_worker(image_path: str) -> dict:
     try:
+        # [Log] Worker 호출 시작 로그는 너무 많아질 수 있으므로 생략하거나 DEBUG 레벨 권장
         result = pool.run(image_path)
 
         if result.get("status") == "error":
@@ -148,6 +149,7 @@ def call_worker(image_path: str) -> dict:
                 f"traceback={result.get('traceback')}"
             )
         else:
+            # 성공 로그 간소화
             logger.info(f"Worker success: {result.get('meta')}")
 
         return result
@@ -159,14 +161,22 @@ def call_worker(image_path: str) -> dict:
             "stage": "pool",
             "message": str(e)
         }
-        }
-
+        
 # ---------------------------------------------------------
 # 페이지 처리
 # ---------------------------------------------------------
 def process_page(page_info):
-    page_num, page_image_path = page_info
+    # [Log] request_id를 함께 받아서 로그 추적성 확보
+    req_id, page_num, page_image_path = page_info
+    
+    logger.info(f"[{req_id}] Processing Page {page_num} start...")
+    t0 = time.time()
+    
     result = call_worker(page_image_path)
+    
+    elapsed = time.time() - t0
+    logger.info(f"[{req_id}] Page {page_num} done ({elapsed:.2f}s)")
+    
     return page_num, result
 
 # ---------------------------------------------------------
@@ -176,6 +186,11 @@ def process_page(page_info):
 async def predict_endpoint(file: UploadFile = File(...)):
     request_id = str(uuid.uuid4())
     original_filename = file.filename
+    
+    # [Log] 요청 시작 시간 측정 및 로그
+    start_total = time.time()
+    logger.info(f"[{request_id}] 🚀 NEW REQUEST: {original_filename}")
+
     temp_files = []
 
     pdf_path = os.path.join(TEMP_DIR, f"{request_id}_{original_filename}")
@@ -190,8 +205,16 @@ async def predict_endpoint(file: UploadFile = File(...)):
     }
 
     try:
+        # [Log] PDF 변환 시작
+        logger.info(f"[{request_id}] Converting PDF to images...")
+        t_pdf = time.time()
+        
         # PDF → 이미지
         images = convert_from_path(pdf_path)
+        
+        # [Log] PDF 변환 완료
+        pdf_elapsed = time.time() - t_pdf
+        logger.info(f"[{request_id}] ✅ PDF converted: {len(images)} pages ({pdf_elapsed:.2f}s)")
 
         page_jobs = []
 
@@ -204,11 +227,20 @@ async def predict_endpoint(file: UploadFile = File(...)):
             img.save(img_path, "JPEG")
             temp_files.append(img_path)
 
-            page_jobs.append((page, img_path))
+            # [Log] process_page에 request_id 전달
+            page_jobs.append((request_id, page, img_path))
+
+        # [Log] 병렬 추론 시작
+        logger.info(f"[{request_id}] Starting inference pool (threads={PDF_THREADS})...")
+        t_inf = time.time()
 
         # 🔥 병렬 처리 핵심
         with ThreadPoolExecutor(max_workers=PDF_THREADS) as ex:
             results = ex.map(process_page, page_jobs)
+
+        # [Log] 병렬 추론 완료
+        inf_elapsed = time.time() - t_inf
+        logger.info(f"[{request_id}] ✅ All pages inference finished ({inf_elapsed:.2f}s)")
 
         has_error = False
 
@@ -221,19 +253,27 @@ async def predict_endpoint(file: UploadFile = File(...)):
                 **result
             })
 
+        total_elapsed = time.time() - start_total
+        status_code = 500 if has_error else 200
+        
+        # [Log] 전체 요청 완료
+        logger.info(f"[{request_id}] ✨ Request finished. Status={status_code}, Total={total_elapsed:.2f}s")
+
         return JSONResponse(
-            status_code=500 if has_error else 200,
+            status_code=status_code,
             content=response
         )
 
     except Exception as e:
-        logger.exception("server error")
+        logger.exception(f"[{request_id}] ❌ Server Error")
         return JSONResponse(
             status_code=500,
             content={"status": "server_error", "message": str(e)}
         )
 
     finally:
+        # [Log] 임시 파일 정리 로그
+        logger.info(f"[{request_id}] Cleaning up {len(temp_files)} temp files...")
         for p in temp_files:
             try:
                 os.remove(p)

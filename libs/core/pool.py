@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class VLLMWorker:
-    def __init__(self, python_bin, worker_script):
+    def __init__(self, python_bin, worker_script): 
         self.python_bin = python_bin
         self.worker_script = worker_script
         self.proc = None

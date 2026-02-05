@@ -1,11 +1,12 @@
-# libs/core/worker.py
-
+import os
 import sys
+
+REAL_STDOUT = sys.stdout
+sys.stdout = sys.stderr
+
 import json
 import traceback
 import time
-import os
-
 from typing import Any, Dict
 
 # ===== 응답 헬퍼 =====
@@ -14,7 +15,7 @@ def ok(data: Any, meta: Dict = None):
         "status": "success",
         "timestamp": time.time(),
         "data": data,
-        "meta": meta or {}
+        "meta": meta or {} 
     }
 
 def error(stage: str, e: Exception):
@@ -30,33 +31,33 @@ def error(stage: str, e: Exception):
 # ===== vLLM 초기화 =====
 try:
     # 🔥 실제 구조 기반 import
-    from chandra.model import generate_vllm
+    from chandra.model import generate_vllm, BatchInputItem
     from chandra.model.util import Image
-    from chandra.model.settings import settings
 
     print("[WORKER] Loading vLLM engine...", file=sys.stderr)
 
     # ✅ Chandra 방식 정식 생성
-    ENGINE = generate_vllm()
+    ENGINE = generate_vllm
 
     print("[WORKER] vLLM ready", file=sys.stderr)
 
 except Exception as e:
-    print(json.dumps(error("vllm_init", e)))
+    REAL_STDOUT.write(json.dumps(error("vllm_init", e)) + "\n")
+    REAL_STDOUT.flush()
     sys.exit(1)
 
 
 # ===== 추론 =====
 def run_inference(image_path: str):
-
     start = time.time()
-
     try:
         # 1. 이미지 로드 (Chandra util 구조)
         img = Image.open(image_path)
 
+        item = BatchInputItem(image=img, prompt="Analyze this document.")
+
         # 2. 추론
-        result = ENGINE([img])
+        result = ENGINE([item])
 
         output = result[0] if isinstance(result, list) else result
 
@@ -84,8 +85,8 @@ def main_loop():
             image_path = req.get("image")
 
             if not image_path:
-                print(json.dumps(error("input", ValueError("no image field"))))
-                sys.stdout.flush()
+                REAL_STDOUT.write(json.dumps(error("input", ValueError("no image field"))) + "\n")
+                REAL_STDOUT.flush()
                 continue
 
             result = run_inference(image_path)
@@ -93,8 +94,8 @@ def main_loop():
         except Exception as e:
             result = error("protocol", e)
 
-        print(json.dumps(result, ensure_ascii=False))
-        sys.stdout.flush()
+        REAL_STDOUT.write(json.dumps(result, ensure_ascii=False) + "\n")
+        REAL_STDOUT.flush()
 
 
 if __name__ == "__main__":
@@ -108,4 +109,4 @@ if __name__ == "__main__":
     p.add_argument("--image")
     args = p.parse_args()
 
-    print(json.dumps(run_inference(args.image), ensure_ascii=False))
+    REAL_STDOUT.write(json.dumps(run_inference(args.image), ensure_ascii=False) + "\n")

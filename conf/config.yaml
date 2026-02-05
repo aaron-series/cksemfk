@@ -14,7 +14,7 @@ paths:
 pdf:
   threads: 4
   
-worker:
+worker: 
   # 프로젝트 루트 기준 상대 경로
   script_path: "libs/core/worker.py"
   python_path:

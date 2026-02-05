@@ -13,8 +13,9 @@ export PYTHONPATH="$PROJECT_ROOT:$PROJECT_ROOT/libs:$PYTHONPATH"
 export TOKENIZERS_PARALLELISM=false
 
 # 필요시 활성
-# export CUDA_VISIBLE_DEVICES=0,1
-# export NCCL_P2P_DISABLE=1
+export CUDA_VISIBLE_DEVICES=0,1   # 사용할 GPU ID 지정 (2개 사용 시)
+export VLLM_GPUS=2                # chandra 설정 (config.yaml의 tensor_parallel 값에 대응)
+export NCCL_P2P_DISABLE=1         # 필요 시 유지
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -26,7 +27,7 @@ NC='\033[0m'
 # config
 # ----------------------------------------------------------
 get_conf() {
-    "$PYTHON_BIN" - <<EOF
+    "$PYTHON_BIN" - <<EOF 
 import yaml, sys
 try:
     c=yaml.safe_load(open('$CONFIG_FILE'))
